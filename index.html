@@ -9,6 +9,29 @@
 <body>
     <div id="jsLife">
         <canvas id="canvasLife"></canvas>
+        <div>FPS: <span id="fpsDisplay"></span></div>
+        <div>
+            <label for="gridSelector">Size of playgrid:</label>
+            <select name="gridSelector" id="gridSelector">
+                <option value="50">50 x 50</option>
+                <option value="100">100 x 100</option>
+                <option value="200">200 x 200</option>
+                <option value="300">300 x 300</option>
+                <option value="400">400 x 400</option>
+            </select>
+        </div>
+        <div>
+            <label for="fpsCap">Max framerate:</label>
+            <select name="fpsCap" id="fpsCap">
+                <option value="5">5</option>
+                <option value="10" selected>10</option>
+                <option value="30">30</option>
+                <option value="60">60</option>
+            </select>
+        </div>
+        <div>
+            <button name="randPattern" id="randPattern">Random Pattern</button>
+        </div>
     </div>
 </body>
 </html>
