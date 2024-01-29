@@ -13,8 +13,8 @@ class Life {
     animFPS = 10;       // how quickly to animate the grid, in frames per second
     timeSync;           // time of last frame render
     frameTime = 1000 / this.animFPS;      // actual frame render time in milliseconds
-    frameTimeAvg = 10;  // average frame time over this many frames
-    isPaused = false;   // allows pausing of the game
+    frameTimeAvg = 10;  // average frame time calculation over this many frames
+    isPaused = false;   // allows pausing of the simulation
 
     cellState = Object.freeze({     // enumeration of cell states
         DEAD:   false,
@@ -46,7 +46,7 @@ class Life {
                 break;
             case this.gridPattern.RANDOM:
                 this.#grid = new Array(this.#gridX).fill(null)      // columns, must fill with null to make iterable
-                    .map(() => new Array(this.#gridY).fill(null).map(() => Math.floor(Math.random()*2)));
+                    .map(() => new Array(this.#gridY).fill(null).map(() => Math.floor(Math.random()*1.5)));
                 break;
         }
     }
@@ -67,21 +67,6 @@ class Life {
         window.requestAnimationFrame(() => this.update());
     }
 
-    setGridSize(gx, gy){
-        const origPause = this.isPaused;    // save original pause state
-        this.isPaused = true;               // don't allow simulation while changing grid parameters
-        this.#gridX = gx;
-        this.#gridY = gy;
-            // ensure the playfield fits into the canvas
-        this.#cellSize = Math.min(Math.floor(this.#resX / this.#gridX), Math.floor(this.#resY / this.#gridY));
-        this.initGrid();
-        this.isPaused = origPause;          // restore pause state
-    }
-
-    setFPSCap(cap){
-        this.animFPS = cap;
-    }
-
     drawGrid(){
         this.#ctx.beginPath();
         this.#ctx.rect(0, 0, this.#resX, this.#resY);
@@ -100,6 +85,39 @@ class Life {
                 }
             }
         }
+    }
+
+    setGridSize(gx, gy){
+        const origPause = this.isPaused;    // save original pause state
+        this.isPaused = true;               // don't allow simulation while changing grid parameters
+        this.#gridX = gx;
+        this.#gridY = gy;
+            // ensure the playfield fits into the canvas
+        this.#cellSize = Math.min(Math.floor(this.#resX / this.#gridX), Math.floor(this.#resY / this.#gridY));
+        this.initGrid();
+        this.drawGrid();
+        this.isPaused = origPause;          // restore pause state
+    }
+
+    setFPSCap(cap){
+        this.animFPS = cap;
+    }
+
+    // set a single cell to ALIVE
+    setAlive(x, y){
+        this.setCell(x, y, this.cellState.ALIVE);
+    }
+
+    // set a single cell to DEAD
+    setDead(x, y){
+        this.setCell(x, y, this.cellState.DEAD);
+    }
+
+    // set a single cell's state by canvas coordinate
+    setCell(x, y, state){
+        const gx = Math.floor(x / this.#cellSize);
+        const gy = Math.floor(y / this.#cellSize);
+        this.#grid[gx][gy] = state;
     }
 
     // count the number of neighbors
@@ -143,17 +161,32 @@ class Life {
 lifeCfg = {
     updateUI:       1.0,        // seconds between updating UI display data (not the playfield)
     updateUISync:   undefined,
+    defaultGridX:   50,
+    defaultGridY:   50,
+    drawPrevPoint:  undefined,  // previous drawing point, if any
+    erasePrevPoint: undefined,  // previous erasure point, if any
 }
 
 function initialize(){
         // the Life canvas and object
-    let life = new Life(document.getElementById("canvasLife"), 50, 50);
+    let canvasLife = document.getElementById("canvasLife");
+    let life = new Life(canvasLife, lifeCfg.defaultGridX, lifeCfg.defaultGridY);
+        // click and mousemove in canvas
+    canvasLife.addEventListener("mousedown", function(e){ drawInCanvas(e, life); });
+    canvasLife.addEventListener("mousemove", function(e){ drawInCanvas(e, life); });
+    canvasLife.addEventListener("contextmenu", (e) => {e.preventDefault();});     // disable the context menu
         // the grid size selector
     let gridSelector = document.getElementById("gridSelector");
     gridSelector.addEventListener("input", function(){ changeGrid(life); });
         // the FPS cap selector
     let fpsCap = document.getElementById("fpsCap");
     fpsCap.addEventListener("input", function(){ changeFPSCap(life); });
+        // button to pause the simulation
+    let pauseSim = document.getElementById("pauseSim");
+    pauseSim.addEventListener("click", function(){ pauseSimulation(pauseSim, life); });
+        // button to clear the playgrid
+    let clearGrid = document.getElementById("clearGrid");
+    clearGrid.addEventListener("click", function(){ clearPlayfield(life); });
         // button to randomize the playgrid pattern
     let randPattern = document.getElementById("randPattern");
     randPattern.addEventListener("click", function(){ randomizePattern(life); });
@@ -162,36 +195,69 @@ function initialize(){
     window.requestAnimationFrame(() => update(life));
 }
 
-function changeGrid(life){
+function drawInCanvas(e, life){
+    if(e.buttons == 1){      // mouse-1 pressed
+        let p = lifeCfg.drawPrevPoint;
+        if(p){
+            const toSet = bresenham(p[0], p[1], e.offsetX, e.offsetY);
+            for(pt of toSet){
+                life.setAlive(pt[0], pt[1]);
+            }
+        }
+        life.setAlive(e.offsetX, e.offsetY);
+        life.drawGrid();
+        lifeCfg.drawPrevPoint = [e.offsetX, e.offsetY]; // no previous draw point, set it
+    }else{
+        lifeCfg.drawPrevPoint = undefined;      // mouse-1 not pressed, no previous draw point
+    }
+
+    if(e.buttons == 2){     // mouse-2 pressed
+        let p = lifeCfg.erasePrevPoint;
+        if(p){
+            const toClear = bresenham(p[0], p[1], e.offsetX, e.offsetY);
+            for(pt of toClear){
+                life.setDead(pt[0], pt[1]);
+            }
+        }
+        life.setDead(e.offsetX, e.offsetY);
+        life.drawGrid();
+        lifeCfg.erasePrevPoint = [e.offsetX, e.offsetY];
+    }else{
+        lifeCfg.erasePrevPoint = undefined;
+    }
+}
+
+function changeGrid(life){              // control to change the grid size
     const gridSelector = document.getElementById("gridSelector");
     const gridDim = parseInt(gridSelector.value);
     life.setGridSize(gridDim, gridDim);
 }
 
-function changeFPSCap(life){
+function changeFPSCap(life){            // control to change the max FPS
     const fpsCap = document.getElementById("fpsCap");
     const newCap = parseInt(fpsCap.value);
     life.setFPSCap(newCap);
 }
 
-function randomizePattern(life){
-    life.initGrid(life.gridPattern.RANDOM);
+function pauseSimulation(el, life){         // toggle the pause state
+    if(life.isPaused){
+        life.isPaused = false;
+        el.textContent = "Pause";
+    }else{
+        life.isPaused = true;
+        el.textContent = "Play";
+    }
 }
 
-// if(this.isPaused === false){
-//     const pNow = performance.now();
-//     const dt = pNow - this.timeSync;
-//     if(dt * this.animFPS / 1000.0 >= 1.0){  // limit framerate to not hog CPU
-//         const ft = this.frameTime;
-//         const fta = this.frameTimeAvg;
-//         this.frameTime = (ft * (fta - 1) + dt) / fta;   // store last delta time
-//         this.timeSync = pNow;               // update animation timer for next frame
-//         this.calcNextGen();
-//         this.drawGrid();
-//     }
-// }
-// window.requestAnimationFrame(() => this.update());
+function clearPlayfield(life){               // clear the playfield
+    life.initGrid(life.gridPattern.CLEAR);
+    life.drawGrid();
+}
 
+function randomizePattern(life){        // set cells randomly
+    life.initGrid(life.gridPattern.RANDOM);
+    life.drawGrid();
+}
 
 function update(life){
     const pNow = performance.now();
@@ -207,7 +273,7 @@ function update(life){
     window.requestAnimationFrame(() => update(life));
 }
 
-// bresenham's line algorithm, plots x0,y0 to x1,y1, returns array of array2's
+// Bresenham's line algorithm, plots x0,y0 to x1,y1, returns array of array2's
 function bresenham(x0, y0, x1, y1){
     let points = [];
 
