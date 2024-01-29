@@ -60,11 +60,15 @@ class Life {
                 const fta = this.frameTimeAvg;
                 this.frameTime = (ft * (fta - 1) + dt) / fta;   // store last delta time
                 this.timeSync = pNow;               // update animation timer for next frame
-                this.calcNextGen();
-                this.drawGrid();
+                this.stepSimulation();
             }
         }
         window.requestAnimationFrame(() => this.update());
+    }
+
+    stepSimulation(){       // perform a single step of the simulation
+        this.calcNextGen();
+        this.drawGrid();
     }
 
     drawGrid(){
@@ -183,7 +187,9 @@ function initialize(){
     fpsCap.addEventListener("input", function(){ changeFPSCap(life); });
         // button to pause the simulation
     let pauseSim = document.getElementById("pauseSim");
-    pauseSim.addEventListener("click", function(){ pauseSimulation(pauseSim, life); });
+    let stepSim = document.getElementById("stepSim");
+    pauseSim.addEventListener("click", function(){ pauseSimulation(pauseSim, stepSim, life); });
+    stepSim.addEventListener("click", function(){ stepSimulation(life); });
         // button to clear the playgrid
     let clearGrid = document.getElementById("clearGrid");
     clearGrid.addEventListener("click", function(){ clearPlayfield(life); });
@@ -239,14 +245,20 @@ function changeFPSCap(life){            // control to change the max FPS
     life.setFPSCap(newCap);
 }
 
-function pauseSimulation(el, life){         // toggle the pause state
+function pauseSimulation(elPause, elStep, life){         // toggle the pause state
     if(life.isPaused){
         life.isPaused = false;
-        el.textContent = "Pause";
+        elPause.textContent = "Pause";
+        elStep.disabled = true;
     }else{
         life.isPaused = true;
-        el.textContent = "Play";
+        elPause.textContent = "Play";
+        elStep.disabled = false;
     }
+}
+
+function stepSimulation(life){      // run simulation for a single step
+    life.stepSimulation();
 }
 
 function clearPlayfield(life){               // clear the playfield
