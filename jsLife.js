@@ -33,20 +33,29 @@ class Life {
         this.setGridSize(gx, gy);
         this.resizeCanvas();
         this.calcCellSize();
-        this.drawGrid();
 
         this.timeSync = performance.now();      // initialize animation timer
+
+            // Note that the following code does NOT work here:
+//        window.requestAnimationFrame(function(){ this.update(); });
+            // ...because on the next frame call, the function no longer knows what "this" is.
+            // We can maintain the reference by calling .bind() to explicitly bind "this" on the
+            // animation frame call, making sure it is always bound to this particular "this":
+//        window.requestAnimationFrame( this.update.bind(this) );
+            // But the arrow function expression seems to implicitly also bind "this" and thus it
+            // also works, and is more compact. We'll use it for animation frame calls within
+            // classes from now on.
         window.requestAnimationFrame(() => this.update());
     }
 
-    // resize the drawing canvas to fit into the current window
-    resizeCanvas(){
-            // some browsers seem to still enable the horizontal scroll bar even when the canvas
-            // is set to the window's inner width, removing an extra 8 pixels seems to fix this
-        this.#resX = window.innerWidth - 8;
-        this.#resY = window.innerHeight - this.#controlZone;
-        this.#canvas.width = this.#resX;
-        this.#canvas.height = this.#resY;
+    setGridSize(gx, gy){
+        const origPause = this.isPaused;    // save original pause state
+        this.isPaused = true;               // don't allow simulation while changing grid parameters
+            // ensure the playfield fits into the canvas
+        this.#gridX = gx;
+        this.#gridY = gy;
+        this.initGrid();
+        this.isPaused = origPause;          // restore pause state
     }
 
     initGrid(style = this.gridPattern.CLEAR){
@@ -62,6 +71,22 @@ class Life {
         }
     }
 
+    // resize the drawing canvas to fit into the current window
+    resizeCanvas(){
+        // some browsers seem to still enable the horizontal scroll bar even when the canvas
+        // is set to the window's inner width, removing an extra 8 pixels seems to fix this
+    this.#resX = window.innerWidth - 8;
+    this.#resY = window.innerHeight - this.#controlZone;
+    this.#canvas.width = this.#resX;
+    this.#canvas.height = this.#resY;
+    }
+
+    // calcualte cell size based on grid size and canvas size
+    calcCellSize(){
+        this.#cellSize = Math.min(Math.floor(this.#resX / this.#gridX), Math.floor(this.#resY / this.#gridY));
+    }
+
+    // animation update function, throttled by animFPS
     update(){
         if(this.isPaused === false){
             const pNow = performance.now();
@@ -77,7 +102,8 @@ class Life {
         window.requestAnimationFrame(() => this.update());
     }
 
-    stepSimulation(){       // perform a single step of the simulation
+    // perform a single step of the simulation
+    stepSimulation(){
         this.calcNextGen();
         this.drawGrid();
     }
@@ -100,20 +126,6 @@ class Life {
                 }
             }
         }
-    }
-
-    setGridSize(gx, gy){
-        const origPause = this.isPaused;    // save original pause state
-        this.isPaused = true;               // don't allow simulation while changing grid parameters
-            // ensure the playfield fits into the canvas
-        this.#gridX = gx;
-        this.#gridY = gy;
-        this.initGrid();
-        this.isPaused = origPause;          // restore pause state
-    }
-
-    calcCellSize(){
-        this.#cellSize = Math.min(Math.floor(this.#resX / this.#gridX), Math.floor(this.#resY / this.#gridY));
     }
 
     setFPSCap(cap){
@@ -197,7 +209,7 @@ function initialize(){
         // click and mousemove in canvas
     canvasLife.addEventListener("mousedown", function(e){ drawInCanvas(e, life); });
     canvasLife.addEventListener("mousemove", function(e){ drawInCanvas(e, life); });
-    canvasLife.addEventListener("contextmenu", (e) => {e.preventDefault();});     // disable the context menu
+    canvasLife.addEventListener("contextmenu", function(e){ e.preventDefault(); });     // disable the context menu
         // the grid size selector
     let gridSelector = document.getElementById("gridSelector");
     gridSelector.addEventListener("input", function(){ changeGrid(life); });
@@ -217,7 +229,7 @@ function initialize(){
     randPattern.addEventListener("click", function(){ randomizePattern(life); });
         // start animations to continuously update UI data
     lifeCfg.updateUISync = performance.now();
-    window.requestAnimationFrame(() => update(life));
+    window.requestAnimationFrame(function(){ update(life); });
 }
 
 function resizeCanvasToWindow(life){
@@ -307,7 +319,7 @@ function update(life){
             fpsElement.textContent = fps.toFixed(1);
         }
     }
-    window.requestAnimationFrame(() => update(life));
+    window.requestAnimationFrame(function(){ update(life); });
 }
 
 // Bresenham's line algorithm, plots x0,y0 to x1,y1, returns array of array2's
