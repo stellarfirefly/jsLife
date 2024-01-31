@@ -2,8 +2,9 @@
 class Life {
     #canvas;            // canvas object, passed to constructor
     #ctx;               // context, set to 2D
-    #resX = 600;        // pixel resolution of the canvas
-    #resY = 600;
+    #resX;              // pixel resolution of the canvas
+    #resY;
+    #controlZone = 120; // size of controls below canvas
     #gridX;             // grid resolution of the playfield
     #gridY;
     #cellSize;          // size of each cell (square)
@@ -27,15 +28,25 @@ class Life {
     });
 
     constructor(canvasElement, gx, gy){
-        this.#canvas = canvasElement;
-        this.#canvas.width = this.#resX;
-        this.#canvas.height = this.#resY;
-        this.#ctx = canvasElement.getContext("2d");
-
+        this.#canvas = document.getElementById(canvasElement);
+        this.#ctx = this.#canvas.getContext("2d");
         this.setGridSize(gx, gy);
+        this.resizeCanvas();
+        this.calcCellSize();
+        this.drawGrid();
 
         this.timeSync = performance.now();      // initialize animation timer
         window.requestAnimationFrame(() => this.update());
+    }
+
+    // resize the drawing canvas to fit into the current window
+    resizeCanvas(){
+            // some browsers seem to still enable the horizontal scroll bar even when the canvas
+            // is set to the window's inner width, removing an extra 8 pixels seems to fix this
+        this.#resX = window.innerWidth - 8;
+        this.#resY = window.innerHeight - this.#controlZone;
+        this.#canvas.width = this.#resX;
+        this.#canvas.height = this.#resY;
     }
 
     initGrid(style = this.gridPattern.CLEAR){
@@ -94,13 +105,15 @@ class Life {
     setGridSize(gx, gy){
         const origPause = this.isPaused;    // save original pause state
         this.isPaused = true;               // don't allow simulation while changing grid parameters
+            // ensure the playfield fits into the canvas
         this.#gridX = gx;
         this.#gridY = gy;
-            // ensure the playfield fits into the canvas
-        this.#cellSize = Math.min(Math.floor(this.#resX / this.#gridX), Math.floor(this.#resY / this.#gridY));
         this.initGrid();
-        this.drawGrid();
         this.isPaused = origPause;          // restore pause state
+    }
+
+    calcCellSize(){
+        this.#cellSize = Math.min(Math.floor(this.#resX / this.#gridX), Math.floor(this.#resY / this.#gridY));
     }
 
     setFPSCap(cap){
@@ -121,7 +134,11 @@ class Life {
     setCell(x, y, state){
         const gx = Math.floor(x / this.#cellSize);
         const gy = Math.floor(y / this.#cellSize);
-        this.#grid[gx][gy] = state;
+            // canvas events can still trigger outside of the draw area as long as it is
+            // still in the canvas area, so we need to make sure the cell is still in bounds
+        if(gx >= 0 && gy >= 0 && gx < this.#gridX && gy < this.#gridY){
+            this.#grid[gx][gy] = state;
+        }
     }
 
     // count the number of neighbors
@@ -173,8 +190,10 @@ lifeCfg = {
 
 function initialize(){
         // the Life canvas and object
-    let canvasLife = document.getElementById("canvasLife");
-    let life = new Life(canvasLife, lifeCfg.defaultGridX, lifeCfg.defaultGridY);
+//    let canvasLife = document.getElementById("canvasLife");
+    let life = new Life("canvasLife", lifeCfg.defaultGridX, lifeCfg.defaultGridY);
+        // resize window
+    window.addEventListener("resize", function(){ resizeCanvasToWindow(life); });
         // click and mousemove in canvas
     canvasLife.addEventListener("mousedown", function(e){ drawInCanvas(e, life); });
     canvasLife.addEventListener("mousemove", function(e){ drawInCanvas(e, life); });
@@ -199,6 +218,11 @@ function initialize(){
         // start animations to continuously update UI data
     lifeCfg.updateUISync = performance.now();
     window.requestAnimationFrame(() => update(life));
+}
+
+function resizeCanvasToWindow(life){
+    life.resizeCanvas();
+    life.calcCellSize();
 }
 
 function drawInCanvas(e, life){
@@ -237,6 +261,7 @@ function changeGrid(life){              // control to change the grid size
     const gridSelector = document.getElementById("gridSelector");
     const gridDim = parseInt(gridSelector.value);
     life.setGridSize(gridDim, gridDim);
+    life.calcCellSize();
 }
 
 function changeFPSCap(life){            // control to change the max FPS
